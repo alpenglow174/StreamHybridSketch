@@ -1,0 +1,9 @@
+\begin{table}[t]\centering\footnotesize
+\caption{Reproduction of Wu et al.~\cite{wu2023}. Single round: median width and fraction of trials with $\ell_\infty\le\tau$ over 10 targets $\tau$. Multi-round ($M{=}10$, $W{=}512$): normalised $\ell_\infty$ ($\times10^{-3}$).}\label{tab:repro}
+\setlength{\tabcolsep}{3pt}\begin{tabular}{lrrrrrr}\toprule
+ & \multicolumn{3}{c}{Median width (ok)} & \multicolumn{3}{c}{Multi-round $\ell_\infty$}\\\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+Dataset & minimax & inst.-opt & 2-phase & Shared & Fresh & Hybrid\\\midrule
+Synthetic & 384 (1.00) & 48 (0.45) & 48 (0.76) & 13.58 & 3.40 & 3.90\\
+Gowalla & 384 (1.00) & 24 (0.85) & 24 (0.96) & 4.69 & 0.99 & 1.41\\
+Sentiment140 & 384 (1.00) & 48 (0.72) & 64 (0.92) & 8.65 & 1.97 & 2.68\\
+\bottomrule\end{tabular}\end{table}

@@ -1,0 +1,9 @@
+\begin{table}[t]\centering\footnotesize
+\caption{TrieHH~\cite{zhu2020} on Sentiment140 ($n{=}659{,}775$ users, $\delta{=}1/n^2$): words discovered, recall of the true top-$k$ and precision of the discovered set w.r.t.\ the true top-200; DP-CountSketch with a public dictionary at the same $(\varepsilon,\delta)$ for reference.}\label{tab:triehh}
+\setlength{\tabcolsep}{3pt}\begin{tabular}{rrrrrrr}\toprule
+$\varepsilon$ & $\theta$ & found & R@50 & R@200 & P@200 & CS R@200\\\midrule
+1 & 15 & 39 & 0.76 & 0.19 & 1.00 & 0.93\\
+2 & 15 & 80 & 1.00 & 0.40 & 1.00 & 0.93\\
+4 & 15 & 142 & 1.00 & 0.70 & 0.99 & 0.93\\
+8 & 15 & 223 & 1.00 & 0.96 & 0.86 & 0.93\\
+\bottomrule\end{tabular}\end{table}

@@ -1,0 +1,13 @@
+\begin{table}[t]\centering\footnotesize
+\caption{Final cumulative $\ell_\infty$ error (counts) vs.\ stream-level $\varepsilon$: per-round release (B) vs.\ tree + peeling (T). Bold: lower.}\label{tab:eps}
+\setlength{\tabcolsep}{3pt}\begin{tabular}{rrrrrrr}\toprule
+ & \multicolumn{2}{c}{Synthetic} & \multicolumn{2}{c}{Gowalla} & \multicolumn{2}{c}{Sentiment140}\\
+$\varepsilon$ & B & T & B & T & B & T\\\midrule
+0.125 & 6119 & \textbf{2324} & 4394 & \textbf{2146} & 2913 & \textbf{1354}\\
+0.25 & 2443 & \textbf{2392} & 2139 & \textbf{1755} & 1486 & \textbf{1177}\\
+0.5 & \textbf{1335} & 2565 & \textbf{1188} & 1728 & \textbf{801} & 931\\
+1 & \textbf{1179} & 2149 & \textbf{693} & 2319 & \textbf{495} & 981\\
+2 & \textbf{1144} & 2770 & \textbf{364} & 1643 & \textbf{380} & 843\\
+4 & \textbf{1148} & 2361 & \textbf{245} & 1810 & \textbf{423} & 951\\
+8 & \textbf{1143} & 6507 & \textbf{249} & 1890 & \textbf{445} & 790\\
+\bottomrule\end{tabular}\end{table}

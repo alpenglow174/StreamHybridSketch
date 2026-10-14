@@ -1,0 +1,18 @@
+{
+  "dataset": "synthetic",
+  "max_rounds": 200,
+  "seconds_per_round": 2.0,
+  "top_k": 50,
+  "n_edges": 8,
+  "fl_server": "fl-server:8080",
+  "topics": {"events": "events", "releases": "releases"},
+  "variants": [
+    {"name": "baseline", "mode": "per_round", "width": 2048, "eps": 1.0, "window": 7, "horizon": 256},
+    {"name": "shs_w", "mode": "per_round", "width": 2048, "adaptive_width": true, "drift": true,
+     "eps": 1.0, "window": 7, "horizon": 256},
+    {"name": "shs_c", "mode": "tree", "width": 2048, "drift": true, "peel": true,
+     "eps": 1.0, "window": 7, "horizon": 256},
+    {"name": "iblt_secagg_only", "mode": "per_round", "width": 64, "adaptive_width": false, "drift": true,
+     "iblt": true, "iblt_cells": 3072, "eps": null, "window": 7, "horizon": 256}
+  ]
+}

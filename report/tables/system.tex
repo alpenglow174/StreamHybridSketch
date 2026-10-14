@@ -1,0 +1,13 @@
+\begin{table}[t]\centering\footnotesize
+\caption{System cost of the live run (synthetic stream, 2\,s per window, 8 edge containers and all services on one 12-core host).}\label{tab:system}
+\begin{tabular}{lr}\toprule Metric & Value\\\midrule
+Rounds (windows) processed & 200\\
+Users / events per round & 20,000 / 20,000\\
+Variants per round & 4\\
+Round latency, median / p95 & 2.14 s / 2.28 s\\
+Slowest edge: payload build (median) & 0.01 s\\
+Slowest edge: wait for watermark (median) & 1.56 s\\
+Server SecAgg unmask (median) & 1.6 ms\\
+Upload per round, all 8 edges & 2.86 MiB\\
+Kafka produce rate (median) & 499k events/s\\
+\bottomrule\end{tabular}\end{table}

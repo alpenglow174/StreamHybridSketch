@@ -1,0 +1,12 @@
+{
+  "rounds": 200,
+  "users_per_round": 20000.0,
+  "events_per_round": 20000.0,
+  "round_latency_s_median": 2.1375283002853394,
+  "round_latency_s_p95": 2.2778897643089295,
+  "edge_build_s_median": 0.011825919151306152,
+  "edge_wait_s_median": 1.5572595596313477,
+  "unmask_ms_median": 1.5505552291870117,
+  "upload_mib_per_round": 2.856494140625,
+  "producer_events_per_s_median": 498826.0483576228
+}

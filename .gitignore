@@ -1,0 +1,10 @@
+data/raw/
+data/processed/
+docker/wheels/*.whl
+results/logs/
+**/__pycache__/
+.pytest_cache/
+report/*.aux
+report/*.log
+report/*.out
+.setup-logs/

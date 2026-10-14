@@ -1,0 +1,15 @@
+\begin{table*}[t]\centering\footnotesize
+\caption{Streaming results at $\varepsilon=1$, $\delta=10^{-6}$ per unit over the whole stream (top-50, 7-round window, 8 edges). F1$_w$/F1$_n$: mean top-50 F1 against the sliding-window / current-round truth; F1$_c$: cumulative top-50 F1 over the second half; $\ell_\infty^c$: final cumulative $\ell_\infty$ error (counts); KiB: upload per edge per round.}\label{tab:main}
+\setlength{\tabcolsep}{3.2pt}\begin{tabular}{lrrrrrrrrrrrrrrr}\toprule
+ & \multicolumn{5}{c}{Synthetic} & \multicolumn{5}{c}{Gowalla} & \multicolumn{5}{c}{Sentiment140}\\
+\cmidrule(lr){2-6} \cmidrule(lr){7-11} \cmidrule(lr){12-16}
+Variant & F1$_w$ & F1$_n$ & F1$_c$ & $\ell_\infty^c$ & KiB & F1$_w$ & F1$_n$ & F1$_c$ & $\ell_\infty^c$ & KiB & F1$_w$ & F1$_n$ & F1$_c$ & $\ell_\infty^c$ & KiB\\\midrule
+Baseline (DP-HybridSketch/round) & 0.96 & 0.91 & 0.99 & 1417 & 80 & 0.80 & 0.73 & 0.98 & 683 & 80 & 0.94 & 0.84 & 0.99 & 460 & 80\\
+\textbf{SHS-W} (= all $-$ tree, $-$ peel) & 0.90 & 0.90 & 0.99 & 11066 & 31 & 0.79 & 0.72 & 0.96 & 745 & 55 & 0.81 & 0.75 & 0.98 & 686 & 54\\
+\textbf{SHS-C} (= all $-$ adaptive width) & 0.90 & 0.90 & 0.99 & 2725 & 159 & 0.57 & 0.53 & 0.97 & 1604 & 159 & 0.73 & 0.69 & 0.98 & 1015 & 157\\
+All components (tree+adapt+drift+peel) & 0.63 & 0.64 & 0.99 & 1215 & 83 & 0.45 & 0.43 & 0.98 & 977 & 115 & 0.67 & 0.64 & 0.99 & 534 & 172\\
+\quad all $-$ drift detector & 0.41 & 0.40 & 0.97 & 3749 & 48 & 0.42 & 0.40 & 0.94 & 2090 & 75 & 0.86 & 0.78 & 0.98 & 1122 & 74\\
+\quad all $-$ peeling & 0.75 & 0.76 & 0.98 & 2586 & 87 & 0.54 & 0.51 & 0.98 & 3440 & 99 & 0.71 & 0.67 & 0.99 & 861 & 191\\
+\midrule
+Non-private reference & 0.99 & 0.92 & 1.00 & 2026 & 80 & 0.98 & 0.81 & 1.00 & 266 & 80 & 0.99 & 0.85 & 1.00 & 360 & 80\\
+\bottomrule\end{tabular}\end{table*}
