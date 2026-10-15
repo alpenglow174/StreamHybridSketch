@@ -19,98 +19,87 @@
 
 \begin{document}
 
-\title{StreamHybridSketch: Federated Linear Sketches with Continual-Release Differential Privacy for Streaming Heavy Hitters}
+\title{StreamHybridSketch: Federated Linear Sketches with Continual-Release Differential Privacy for Streaming Heavy Hitters\thanks{IOE413 Streaming Data Analytics mini-project, Team 22. Code, data scripts and results: see the accompanying repository and README.}}
 
-% TODO(team): replace placeholders with the four team members and affiliation
-\author{\IEEEauthorblockN{Member One, Member Two, Member Three, Member Four}
-\IEEEauthorblockA{\textit{IOE413 Streaming Data Analytics -- Team 22}\\
-\textit{Department / University (placeholder)}}}
+\author{
+\IEEEauthorblockN{Adnan Soni}
+\IEEEauthorblockA{2023BCD0017}
+\and
+\IEEEauthorblockN{Bhaskara Akshay Sriram}
+\IEEEauthorblockA{2023BCD0015}
+\and
+\IEEEauthorblockN{Muhammed Minhaj P S}
+\IEEEauthorblockA{2023BCS0225}
+\and
+\IEEEauthorblockN{Hafiz Feroze}
+\IEEEauthorblockA{2023BCS0006}
+}
 
 \maketitle
 
 \begin{abstract}
-Live statistics such as trending words or popular places are often computed from data that
-lives on user devices or in separate organisations. Federated linear sketches combined with
-secure aggregation and differential privacy (DP) let a server estimate frequencies without seeing raw
-events, but existing methods target a fixed dataset analysed in a few rounds. We build an
-end-to-end streaming pipeline---Kafka ingestion, eight Flower edge clients with X25519 pairwise-mask
-secure aggregation and distributed Gaussian noise, a Flower server strategy, a release topic, an
-evaluator and a Grafana dashboard---and reproduce three base methods inside it: DP-HybridSketch
-(Wu et al., NeurIPS'23), TrieHH (Zhu et al., AISTATS'20) and IBLT-based heavy-hitter recovery
-(Gasc\'on et al., FL@ICML'23). On top of the per-window DP-HybridSketch baseline we add
-binary-tree continual release, a heavy-hitter \emph{peeling} estimator for shared-sign tree nodes,
-adaptive two-phase sketch width, a top-$k$ drift detector and an invertible (IBLT) layer.
-On Gowalla, Sentiment140 and a synthetic drifting Zipf stream, the drift-aware per-round variant recovers
-heavy-hitter F1 after an abrupt drift in 1.5 instead of 5.5 rounds and cuts upload by 31--61\% on two datasets at
-equal privacy; tree release with peeling halves the cumulative $\ell_\infty$ error at a small budget ($\eps=0.125$).
-We also report where the enhancements do \emph{not} help: tree release loses on sliding windows and at
-$\eps\ge 1$, and the IBLT layer costs 2--4$\times$ more communication than a dictionary-assisted CountSketch.
+Federated linear sketches with secure aggregation and differential privacy (DP) let a server estimate item
+frequencies without seeing raw events, but existing methods analyse a fixed dataset in a few rounds. We build an
+end-to-end streaming pipeline---Kafka ingestion, eight Flower edge clients with pairwise-mask secure aggregation and
+distributed Gaussian noise, a Flower server, and a Grafana dashboard---and reproduce three base methods in it:
+DP-HybridSketch, TrieHH and IBLT-based heavy-hitter recovery. On top of the per-window DP-HybridSketch baseline we add
+tree-based continual release, a \emph{peeling} estimator, adaptive sketch width, a drift detector and an IBLT layer.
+On Gowalla, Sentiment140 and a drifting synthetic stream, the drift-aware variant recovers heavy-hitter F1 after an
+abrupt drift in 1.5 instead of 5.5 rounds and cuts upload by 31--61\% at equal privacy; tree release with peeling halves
+the cumulative error at a small budget ($\eps=0.125$). We also report where the enhancements do \emph{not} help: tree
+release loses on sliding windows and at $\eps\ge1$, and the IBLT costs 2--4$\times$ more communication than a
+dictionary-assisted CountSketch.
 \end{abstract}
 
 \begin{IEEEkeywords}
-federated analytics, count sketch, differential privacy, continual release, secure aggregation, heavy hitters, Kafka, Flower
+federated analytics, count sketch, differential privacy, continual release, secure aggregation, heavy hitters
 \end{IEEEkeywords}
 
 \section{Introduction}
-Keyboards that learn new words, maps that surface busy places and hospitals that share error codes all need
-\emph{live} frequency statistics over data they should not centralise. Federated analytics keeps the data local
-and moves only compact summaries; \emph{linear} sketches such as CountSketch~\cite{charikar2002} are a natural choice because the
-server can add them under secure aggregation (SecAgg) and learn only the sum~\cite{wu2023,bonawitz2017}.
-Real data, however, is an unbounded stream whose distribution drifts, and a system that keeps releasing
-statistics must account for the privacy it spends across all releases. Existing federated sketch methods analyse a
-fixed population in one or a handful of rounds~\cite{wu2023,zhu2020,gascon2023}.
+Trending words, busy places and common error codes are \emph{live} statistics over data that should not be
+centralised. Federated analytics keeps data local and sends only summaries; \emph{linear} sketches such as
+CountSketch~\cite{charikar2002} fit well because a server can add them under secure aggregation (SecAgg) and learn
+only the sum~\cite{wu2023,bonawitz2017}. Real data, however, is an unbounded, drifting stream, and every release
+spends privacy. Existing federated sketch methods analyse a fixed population in a few rounds~\cite{wu2023,zhu2020,gascon2023}.
 
-\textbf{Problem.} Estimate item frequencies and top-$k$ heavy hitters over distributed, drifting event streams with
-federated linear sketches, SecAgg and DP, keeping error, per-client communication and cumulative privacy loss low.
-A batch system cannot answer this (it needs a release every window), and a single tool cannot either: we need a
-log (Kafka), federated orchestration (Flower), cryptographic aggregation, a DP accountant and a live dashboard.
+\textbf{Problem.} Estimate frequencies and top-$k$ heavy hitters over distributed, drifting streams with federated
+sketches, SecAgg and DP, keeping error, upload and cumulative privacy loss low. This needs a release every window, so a
+batch job cannot do it, and no single tool covers ingestion, federated orchestration, aggregation, accounting and monitoring.
 
-\textbf{Contributions.}
-(1)~A working streaming pipeline with real data flowing Kafka $\rightarrow$ Flower edges $\rightarrow$ SecAgg
-$\rightarrow$ server $\rightarrow$ Kafka $\rightarrow$ InfluxDB/Grafana, and an offline harness that runs the
-\emph{identical} protocol code (bit-identical aggregates, verified). (2)~Reproductions of the core claims of
-three base papers on public data. (3)~StreamHybridSketch: tree continual release, a peeling estimator, adaptive
-width, drift detection and an IBLT layer, each ablated. (4)~An honest quantitative comparison, including negative
-results and the regime boundaries of each component.
+\textbf{Contributions.} (1)~A streaming pipeline with real data flowing Kafka $\rightarrow$ Flower edges $\rightarrow$
+SecAgg $\rightarrow$ server $\rightarrow$ Kafka $\rightarrow$ InfluxDB/Grafana, plus an offline harness running the
+identical protocol code. (2)~Reproductions of three base papers. (3)~StreamHybridSketch: five ablated stream extensions.
+(4)~A quantitative comparison including negative results.
 
 \section{Related Work and Gap}
-\textbf{Wu et al.~\cite{wu2023} (primary baseline).} \emph{Question:} how should a CountSketch under SecSum be sized
-and reused across rounds, with and without DP? \emph{Data:} Gowalla (grid, $d{=}175$k), C4, Sentiment140.
-\emph{Metrics:} $\ell_\infty$ error, sketch size/communication, $(\eps,\delta)$. \emph{Findings:} the necessary width depends on
-the tail of the frequency vector, so a two-phase method (fit a power law to a small probe sketch, then size the sketch)
-matches the instance-optimal width; in multi-round settings HybridSketch---shared bucket hash, fresh sign hash each
-round---beats SharedSketch and FreshSketch; DP-HybridSketch (Gaussian noise per released sketch) is near minimax-optimal.
-\emph{Model:} no learned model.
+\textbf{Wu et al.~\cite{wu2023} (baseline).} \emph{Question:} how to size and reuse a CountSketch under secure
+summation, with and without DP. \emph{Data:} Gowalla, C4, Sentiment140. \emph{Metrics:} $\ell_\infty$ error,
+communication, $(\eps,\delta)$. \emph{Findings:} the needed width depends on the distribution's tail, and a two-phase
+rule finds it; HybridSketch (shared bucket hash, fresh sign hash per round) beats Shared and Fresh sketches; its DP
+version is near-optimal. \emph{Model:} none.
 
-\textbf{Zhu et al.~\cite{zhu2020} (TrieHH).} \emph{Question:} can heavy hitters be discovered from on-device data with central DP
-and minimal disclosure? \emph{Data:} Sentiment140 (1.6M tweets, 650k users). \emph{Metrics:} precision/recall/F1 of top
-words vs.\ $\eps$. \emph{Findings:} sampling $\gamma\sqrt n$ users per round and keeping trie prefixes with $\ge\theta$ votes is
-$(\eps,\delta)$-DP without added noise, and recovers most top words at single-digit $\eps$. \emph{Model:} none (interactive trie).
-
-\textbf{Gasc\'on et al.~\cite{gascon2023}.} \emph{Question:} what are the communication limits of multi-round heavy-hitter
-recovery when clients may only send linear sketches? \emph{Data:} Stack Overflow (TFF), 3-character prefixes.
-\emph{Metrics:} F1 vs.\ per-user communication and rounds. \emph{Findings:} frequency oracles (CountSketch, Count-Min)
-are suboptimal; IBLTs~\cite{goodrich2011} with local threshold sampling reach F1$=0.8$ with $\sim$10$\times$ less communication.
+\textbf{Zhu et al.~\cite{zhu2020} (TrieHH).} \emph{Question:} can heavy hitters be found from on-device data with
+central DP? \emph{Data:} Sentiment140. \emph{Metrics:} precision/recall vs.\ $\eps$. \emph{Findings:} sampling
+$\gamma\sqrt n$ users per round and keeping trie prefixes with $\ge\theta$ votes is DP without added noise.
 \emph{Model:} none.
 
-\textbf{Gap.} All three release statistics a fixed number of times over a static population. A stream needs a
-release \emph{every} window, so (i) noise accumulates or privacy loss composes over time, (ii) the right sketch width
-changes as the distribution changes, and (iii) sliding-window statistics must react to drift. The binary-tree
-mechanism~\cite{dwork2010,chan2011} answers (i) for scalar counters but, as we show, interacts badly with
-HybridSketch's fresh signs; no prior work combines it with federated sketches.
+\textbf{Gasc\'on et al.~\cite{gascon2023}.} \emph{Question:} what does multi-round heavy-hitter recovery cost when
+clients may only send linear sketches? \emph{Data:} Stack Overflow. \emph{Metrics:} F1 vs.\ communication.
+\emph{Findings:} IBLTs~\cite{goodrich2011} with threshold sampling need $\sim$10$\times$ less communication than
+CountSketch. \emph{Model:} none.
+
+\textbf{Gap.} All three release a fixed number of times. A stream releases every window, so noise or privacy loss
+accumulates, the right width changes, and windows must react to drift. The tree mechanism~\cite{dwork2010,chan2011}
+handles the first issue for counters but, as we show, conflicts with HybridSketch's fresh signs.
 
 \section{System Architecture}
-Fig.~\ref{fig:arch} shows the pipeline. A \textbf{producer} replays a dataset in event-time order into Kafka topic
-\texttt{events}, one partition per edge (users are hashed to 8 edges), and appends a watermark to every partition
-when a window closes. Each \textbf{edge} is a Flower client that consumes only its partition. In Flower round $1$
-it publishes an X25519 public key; in round $2{+}t$ it waits for watermark $t$, samples one item per local user,
-builds the payload of every configured variant (sketch nodes, its share of the Gaussian noise, optional IBLT),
-masks it with pairwise HKDF-derived PRG masks and returns it. The \textbf{Flower server} (custom
-\texttt{Strategy}) plans each round (node set, widths, hash seeds, noise scale, IBLT threshold), sums the masked
-payloads modulo $2^{64}$ (masks cancel), decodes each variant, updates drift and width state, and publishes a
-release (top-$k$ for the sliding window and the cumulative stream) to Kafka topic \texttt{releases}. An
-\textbf{evaluator} (not part of the protocol) recomputes exact ground truth from \texttt{events}, scores every
-release and writes metrics to \textbf{InfluxDB}, visualised live in \textbf{Grafana}.
+Fig.~\ref{fig:arch} shows the pipeline. A \textbf{producer} replays a dataset in event-time order into Kafka, one
+partition per edge, and marks each window's end with a watermark. Each of 8 \textbf{edges} is a Flower client reading
+only its partition: it samples one item per local user, builds each variant's sketch plus its noise share, masks the
+payload with pairwise X25519-derived masks and returns it. The \textbf{Flower server} plans each round (widths, seeds,
+noise, IBLT threshold), sums the masked payloads (masks cancel), decodes, and publishes top-$k$ releases to Kafka. An
+\textbf{evaluator}, outside the protocol, scores releases against exact truth and writes metrics to \textbf{InfluxDB}
+for \textbf{Grafana}.
 
 \begin{figure*}[t]
 \centering
@@ -143,38 +132,28 @@ Dashed: the control plane (round plans) and the evaluator's ground-truth read.}
 \end{figure*}
 
 \section{Proposed Enhancement: StreamHybridSketch}
-\textbf{Privacy model.} Each user contributes one item per window, sampled uniformly from its events (as in
-\cite{wu2023,zhu2020}). The privacy unit is one user's contribution to one window---event-level DP under continual
-observation~\cite{dwork2010}. A depth-$d$ CountSketch then has $L_2$ sensitivity exactly $\sqrt d$. Each of the $K$ edges
-adds $\mathcal N(0,\sigma^2/K)$ (fixed point, $2^{-8}$) so the aggregate carries $\mathcal N(0,\sigma^2)$ and the server never
-sees un-noised data. Budgets are calibrated and reported with Google's R\'enyi-DP~\cite{mironov2017} accountant, including a noisy user count released each round.
+\textbf{Privacy model.} Each user contributes one item per window, so a depth-$d$ CountSketch has $L_2$ sensitivity
+$\sqrt d$; the unit is one user in one window (event-level DP~\cite{dwork2010}). Each of $K$ edges adds
+$\mathcal N(0,\sigma^2/K)$, so the server never sees un-noised data. Budgets are tracked with a R\'enyi-DP~\cite{mironov2017} accountant.
 
-\textbf{(a) Tree continual release.} The baseline releases each window's sketch once with noise $\sigma_B$; a cumulative
-query over $t$ windows then has noise variance $t\sigma_B^2$. We instead release every completed dyadic node of a binary tree
-over windows (height $h{=}\lceil\log_2 T\rceil$), so each unit appears in $h{+}1$ releases and any prefix or window is a sum of
-$O(\log t)$ nodes. Edges keep their local per-window histograms and re-encode node sketches, so a level-$\ell$
-node costs one extra sketch upload every $2^\ell$ rounds (about $2\times$ the baseline upload in total).
+\textbf{(a) Tree continual release.} Summing $t$ noisy per-window sketches gives noise variance $t\sigma^2$. We instead
+release the nodes of a binary tree over windows, so any prefix or window is a sum of $O(\log t)$ nodes; each unit appears
+in $\lceil\log_2 T\rceil{+}1$ releases. Upload roughly doubles.
 
-\textbf{(b) Peeling estimator.} Tree nodes must be summable, so all nodes share sign hashes---this turns HybridSketch
-into a SharedSketch, whose error is driven by heavy items colliding coherently across rounds (Sec.~\ref{sec:res}).
-For each node we estimate the top-$P$ ($P{=}200$) candidates, subtract their encoded estimates, read every item from
-the residual and add back its own estimate. This is pure post-processing (no privacy cost).
+\textbf{(b) Peeling.} Tree nodes must share sign hashes to be summable, which turns HybridSketch into a SharedSketch whose
+error is dominated by heavy items colliding across rounds. Per node we estimate the top-200 items, subtract them, read every
+item from the residual and add its own estimate back. This is post-processing, so it is free in privacy.
 
-\textbf{(c) Adaptive two-phase width.} Following \cite{wu2023}, the server fits $f_i\approx\beta i^{-\alpha}$ to the top-20 estimates
-of the previous release and sets $W=2(\#\{f_i\ge\tau\}+\tau^{-2}\sum_{f_i<\tau}f_i^2)$ (rounded to a power of two, smoothed
-over three rounds) for target $\tau$. Widths are powers of two, so sketches of different widths fold exactly.
-Because phase 1 reuses the last release, it costs no extra round or privacy.
+\textbf{(c) Adaptive width.} The server fits a power law to the previous release's top-20 estimates and applies the
+two-phase width rule of~\cite{wu2023} (power-of-two widths, smoothed over three rounds), at no extra round or privacy cost.
 
-\textbf{(d) Drift detection.} Each round the server compares the top-50 of the newest window with the top-50 of the
-current sliding window. If the Jaccard overlap falls below half its recent mean, it restarts the sliding window at
-the current round and resets the width to its maximum.
+\textbf{(d) Drift detection.} If the top-50 overlap between the newest window and the sliding window falls below half its
+recent mean, the server restarts the window and resets the width.
 
-\textbf{(e) IBLT layer.} Optionally, users threshold-sample their item (keep with probability $1/t$, report value $t$) and
-insert it into a 3-hash additive IBLT. The server peels the aggregate to list identities without a candidate
-dictionary, and adapts $t$ by feedback on the table's load. This layer is protected by SecAgg and sampling, not DP.
+\textbf{(e) IBLT layer.} Users threshold-sample their item into an additive IBLT, which the server decodes to list heavy
+items without a dictionary. It is protected by SecAgg and sampling, not DP.
 
-Algorithm~\ref{alg:round} summarises one round of the protocol; the per-round baseline is the special case with only
-the leaf node, fixed $W$ and fresh signs.
+Algorithm~\ref{alg:round} summarises a round; the baseline is the case with one leaf node, fixed $W$ and fresh signs.
 \begin{algorithm}[t]
 \caption{One StreamHybridSketch round (window $t$)}\label{alg:round}
 \begin{algorithmic}[1]
@@ -194,9 +173,8 @@ the leaf node, fixed $W$ and fresh signs.
 \end{algorithmic}
 \end{algorithm}
 
-From the ablations we recommend two configurations: \textbf{SHS-W} (per-round release + (c) + (d)) for
-sliding-window and current-trend queries, and \textbf{SHS-C} (tree (a) + peeling (b) + (d), fixed width) for long-horizon
-cumulative statistics at small $\eps$.
+From the ablations we recommend two configurations: \textbf{SHS-W} (per-round release + (c) + (d)) for window and
+current-trend queries, and \textbf{SHS-C} (tree + peeling + (d), fixed width) for long-horizon totals at small $\eps$.
 
 \begin{figure*}[t]\centering
 \includegraphics[width=0.56\textwidth]{repro_single.pdf}\hfill
@@ -206,114 +184,97 @@ cumulative statistics at small $\eps$.
 Top right: DP-HybridSketch error vs.\ $\eps$ (dotted: non-private). Bottom: multi-round $\ell_\infty$ vs.\ width for Shared, Fresh and Hybrid sketches.}
 \label{fig:repro}
 \end{figure*}
-\begin{figure*}[t]\centering\includegraphics[width=0.66\textwidth]{grafana_dashboard.png}
-\caption{Grafana dashboard of the 200-round live run (top part): headline counters, top-50 F1 per variant against sliding-window,
-current-round and cumulative truth, and privacy spent. At both drifts the baseline (green) collapses on the current-round panel while
-SHS-W/SHS-C recover within a round; SHS-W's window restart shows as a dip on the sliding-window panel.}\label{fig:grafana}
+\begin{figure*}[t]\centering\includegraphics[width=0.82\textwidth]{grafana_dashboard.png}
+\caption{Grafana dashboard of the 200-round live run: top-50 F1 per variant against window, current and cumulative truth,
+and privacy spent. At both drifts the baseline (green) collapses on the current-round panel while SHS-W/SHS-C recover within a round.}\label{fig:grafana}
 \end{figure*}
 \section{Implementation}
-\textbf{Data.} \emph{Gowalla} (SNAP) check-ins from 2010-01-01 to 2010-10-22, mapped to 0.05$^\circ$ grid cells as in~\cite{wu2023}:
-6.1M events, 295 daily windows, $\sim$8.5k users/window, 80k items. \emph{Sentiment140}: 1.6M tweets as 22M word events (letters
-only, truncated to 8 characters), 124 non-empty 6-hour windows, $\sim$9.8k users/window. \emph{Synthetic}: Zipf(1.1) over
-100k items, 20k users/round, 200 rounds; the identities of the top-200 ranks are swapped with cold items at rounds 70
-and 140. The Stack Overflow data of~\cite{gascon2023} (several GB via TFF) is replaced by the synthetic stream.
+\textbf{Data.} \emph{Gowalla}: 6.1M check-ins in 2010 mapped to 5\,km grid cells (as in~\cite{wu2023}), 295 daily windows,
+$\sim$8.5k users each. \emph{Sentiment140}: 1.6M tweets as 22M word events, 124 six-hour windows, $\sim$9.8k users each.
+\emph{Synthetic}: Zipf(1.1) over 100k items, 20k users per round, 200 rounds, with the top-200 items replaced at rounds 70 and 140.
+It stands in for the multi-GB Stack Overflow data of~\cite{gascon2023}.
 
-\textbf{Tools.} Kafka 3.7.0 (KRaft), Flower~\cite{beutel2020} 1.11.1, Python 3.11/NumPy 1.26, \texttt{cryptography} 42 (X25519, HKDF),
-dp-accounting 0.4.4, confluent-kafka 2.4, InfluxDB 1.8, Grafana 10.4, all in a Docker Compose project.
-\textbf{Configuration.} Depth $d{=}5$, baseline width 2048, 8 edges, top-$k{=}50$, sliding window 7 rounds, $\delta=10^{-6}$,
-dictionary = items seen $\ge3$ times (the public candidate set assumed by~\cite{wu2023}). Unit tests verify mask
-cancellation, IBLT linearity, exact folding and that noise-free tree sums equal a direct sketch of the union.
+\textbf{Tools.} Kafka 3.7.0, Flower~\cite{beutel2020} 1.11.1, Python 3.11, \texttt{cryptography} 42, dp-accounting 0.4.4,
+InfluxDB 1.8, Grafana 10.4, in Docker Compose. \textbf{Settings.} Depth 5, baseline width 2048, 8 edges, top-50,
+7-round window, $\delta=10^{-6}$; the candidate dictionary is items seen $\ge3$ times. Unit tests check mask cancellation,
+IBLT linearity and exact tree sums.
 
 \section{Experimental Setup and Results}\label{sec:res}
+\textbf{Metrics.} \emph{Accuracy}: top-50 F1 against three truths---the 7-window sliding window (F1$_w$), the current window
+(F1$_n$, which shows drift tracking) and the whole stream so far (F1$_c$)---and the $\ell_\infty$ error of the estimated counts.
+\emph{Communication}: upload per edge per round. \emph{Privacy}: $(\eps,\delta)$ per unit from the accountant. \emph{Drift}:
+rounds until F1$_n$ regains 90\% of its pre-drift level. \emph{System}: round latency and SecAgg cost. Each variant runs on
+the same stream with the same seeds, so differences come from the method alone.
 \subsection{Reproduction of the base papers}
 \input{tables/repro.tex}
-Table~\ref{tab:repro} and Fig.~\ref{fig:repro} reproduce Wu et al. In a single round, the two-phase rule picks widths 6--16$\times$
-smaller than the minimax rule and close to the instance-optimal width, meeting the target error in 76--96\% of trials---the paper's
-central single-round claim. In the multi-round setting HybridSketch beats SharedSketch by 3.2--3.5$\times$, as reported. Unlike the
-paper, FreshSketch was 1.15--1.4$\times$ better than HybridSketch in our heterogeneous, time-ordered rounds at $d{=}5$; we report this
-as a partial reproduction. DP-HybridSketch's error falls with $\eps$ and reaches the non-private error by $\eps\approx2$
-(Fig.~\ref{fig:repro}, right). TrieHH (Table~\ref{tab:triehh}) discovers 39--223 words with precision 0.86--1.00 and recall@50 of
-1.00 for $\eps\ge2$, matching the paper's trend; with a public dictionary, a one-shot DP CountSketch reaches recall@200 = 0.93 at
-every $\eps$, which shows how much TrieHH pays for not needing a dictionary.
+For Wu et al. (Table~\ref{tab:repro}, Fig.~\ref{fig:repro}), the two-phase rule picks widths 6--16$\times$ smaller than the
+minimax rule and meets the target error in 76--96\% of trials, as claimed. HybridSketch beats SharedSketch by 3.2--3.5$\times$,
+also as claimed, but FreshSketch beat HybridSketch by 1.15--1.4$\times$ in our time-ordered rounds, so that part reproduces
+only partially. DP error reaches the non-private level by $\eps\approx2$. TrieHH (Table~\ref{tab:triehh}) finds 39--223 words
+with precision 0.86--1.00, matching the paper's trend; a DP CountSketch \emph{with} a dictionary reaches recall@200 = 0.93 at any $\eps$.
 \input{tables/triehh.tex}
 \input{tables/drift.tex}
 \input{tables/system.tex}
 \begin{figure*}[t]\centering
 \includegraphics[width=0.49\textwidth]{cum_over_time.pdf}\hfill
 \includegraphics[width=0.49\textwidth]{drift.pdf}
-\caption{Left: cumulative $\ell_\infty$ error over the stream at $\eps=0.25$, per-round release vs.\ tree release with peeling (\S\ref{sec:res}-B).
+\caption{Left: cumulative $\ell_\infty$ error over the stream at $\eps=0.25$, per-round release vs.\ tree release with peeling.
 Right: top-50 F1 against the current round's truth on the synthetic stream ($\eps=1$, 3-round moving average); dashed lines mark the true drifts.}
 \label{fig:cumtime}\label{fig:drift}
 \end{figure*}
 \input{tables/main.tex}
+\input{tables/eps.tex}
 \begin{figure*}[t]\centering
-\includegraphics[width=0.58\textwidth]{eps_sweep.pdf}
+\includegraphics[width=0.78\textwidth]{eps_sweep.pdf}
 \caption{Final cumulative $\ell_\infty$ (normalised, top) and second-half cumulative top-50 F1 (bottom) vs.\ stream-level $\eps$.}
 \label{fig:eps}
 \end{figure*}
 
 \subsection{Streaming: baseline vs.\ enhancements}
 \begin{figure*}[t]\centering
-\includegraphics[width=0.40\textwidth]{comm_adaptive.pdf}\hfill
-\includegraphics[width=0.58\textwidth]{hh_comm.pdf}
-\caption{Left: window F1 vs.\ upload, fixed vs.\ adaptive width ($\eps=1$). Right: no-DP heavy hitters, CountSketch+dictionary vs.\ IBLT.}
+\includegraphics[width=0.62\textwidth]{comm_adaptive.pdf}\\[2mm]
+\includegraphics[width=0.80\textwidth]{hh_comm.pdf}
+\caption{Top: window F1 vs.\ upload, fixed vs.\ adaptive width ($\eps=1$). Bottom: no-DP heavy hitters, CountSketch+dictionary vs.\ IBLT.}
 \label{fig:comm}
 \end{figure*}
-Table~\ref{tab:main} reports all variants at $\eps=1$. \textbf{SHS-W} keeps the baseline's window F1 on Gowalla (0.79 vs.\ 0.80)
-with 31\% less upload (55 vs.\ 80\,KiB per edge per round) and uses 2.6$\times$ less on the synthetic stream at a 0.06 F1 cost.
-On Sentiment140 it loses 0.13 window F1 because the drift detector fires on organic topic shifts and shortens the window.
-\textbf{SHS-C} matches the baseline on cumulative F1 but has lower window F1 at $\eps{=}1$. Combining every component is worse than
-either recommended configuration: adaptive width picks narrow sketches from noisy releases, and shared-sign tree nodes cannot
-tolerate them. Removing peeling from the full combination raises its cumulative error 1.6--3.5$\times$.
+\textbf{Overall (Table~\ref{tab:main}, $\eps=1$).} SHS-W matches the baseline's window F1 on Gowalla (0.79 vs.\ 0.80) with 31\%
+less upload, and uses 2.6$\times$ less on the synthetic stream for 0.06 lower F1. On Sentiment140 it loses 0.13 F1 because the
+detector fires on organic topic shifts. SHS-C matches the baseline on cumulative F1. Enabling every component at once is worse
+than either configuration, and removing peeling raises cumulative error 1.6--3.5$\times$.
 
-\textbf{Privacy--accuracy over time.} Table~\ref{tab:eps} and Fig.~\ref{fig:eps} vary the stream-level budget. With per-round
-release, noise accumulates over the $t$ windows of a cumulative query; with the tree it grows with $\log t$. At
-$\eps{=}0.125$ the tree with peeling cuts the final cumulative $\ell_\infty$ error by 2.0--2.6$\times$ and raises second-half
-cumulative F1 on Gowalla from 0.74 to 0.90; at $\eps{=}0.25$ the gain shrinks to 1.0--1.3$\times$, and from $\eps\ge0.5$ the baseline is better: noise is no longer dominant,
-and the tree's shared-sign collision floor ($\approx6\times10^{-4}n$) remains. For short sliding windows the per-round release
-always wins, since a 7-round window needs only 7 noisy sketches while the tree needs up to 4 nodes at $\sqrt{h{+}1}\times$ more noise each.
-Fig.~\ref{fig:cumtime} shows the mechanism behind the cumulative result at $\eps{=}0.25$: the baseline's cumulative error keeps growing with
-the number of summed noisy rounds, while the tree's error stays flat after the first few levels are filled.
-\input{tables/eps.tex}
+\textbf{Privacy over time (Table~\ref{tab:eps}, Figs.~\ref{fig:eps}, \ref{fig:cumtime}).} At $\eps=0.125$ the tree with peeling
+cuts final cumulative error 2.0--2.6$\times$ and lifts Gowalla's cumulative F1 from 0.74 to 0.90. The gain shrinks to
+1.0--1.3$\times$ at $\eps=0.25$, and from $\eps\ge0.5$ the baseline wins because noise no longer dominates. For short windows
+the baseline always wins.
 
-\textbf{Drift.} Fig.~\ref{fig:drift} and Table~\ref{tab:drift}: on the synthetic stream the detector fires exactly at rounds 70 and 140
-with no false alarms. The baseline's fixed window drops to F1 0.15 and needs 5.5 rounds to recover; SHS-W and SHS-C bottom out at
-0.55--0.60 and recover in 1.5 rounds, raising mean F1 over the seven post-drift rounds from 0.56 to 0.84--0.85.
+\textbf{Drift (Table~\ref{tab:drift}, Fig.~\ref{fig:drift}).} The detector fires exactly at rounds 70 and 140. The baseline
+drops to F1 0.15 and needs 5.5 rounds to recover; SHS-W and SHS-C recover in 1.5, lifting post-drift F1 from 0.56 to 0.85.
 
-\textbf{Communication.} Fig.~\ref{fig:comm} (left) sweeps fixed widths against adaptive targets at $\eps=1$: adaptive width lies on
-or just below the fixed-width frontier, so its value is choosing a good operating point without per-dataset tuning, not beating the
-best width chosen in hindsight. Fig.~\ref{fig:comm} (right) evaluates heavy-hitter recovery without DP. On real data the IBLT needs
-2--4$\times$ more upload than a CountSketch for the same F1, and the gap closes on the synthetic stream. Its benefit is that it
-needs no dictionary (Paper~3 compared against a CountSketch without one).
+\textbf{Communication (Fig.~\ref{fig:comm}).} Adaptive width sits on the fixed-width frontier: it finds a good width without
+tuning, but does not beat the best one chosen in hindsight. Without DP, the IBLT needs 2--4$\times$ more upload than a
+dictionary-assisted CountSketch on real data; its benefit is needing no dictionary.
 
 \subsection{Live pipeline and system cost}
-Table~\ref{tab:system} and Fig.~\ref{fig:grafana} come from a full live run on the synthetic stream with four variants side by side
-(baseline, SHS-W, SHS-C and the SecAgg-only IBLT). Because the producer paces the replay at 2\,s per window, the median round latency (2.14\,s from dispatch to release, p95 2.28\,s) is mostly the edges waiting for the window's watermark (1.56\,s). Building a payload takes 12\,ms per edge and SecAgg unmasking 1.6\,ms at the server; the remaining $\approx$0.6\,s is Flower/gRPC transfer of 2.9\,MiB per round and server-side decoding of the four variants. The Kafka producer sustains $\approx$500k events/s, far above the stream rate, so the pipeline could replay much faster than real time. Replaying the same
-configuration through the harness gives identical widths and payload sizes in every round and per-round F1 within 0.04 over all 200 rounds (top-$k$
-ties), so the offline results describe the deployed pipeline.
+Table~\ref{tab:system} and Fig.~\ref{fig:grafana} come from a 200-round live run with four variants. With replay paced at
+2\,s per window, median round latency is 2.14\,s, mostly waiting for the watermark (1.56\,s); payload building takes 12\,ms and
+SecAgg unmasking 1.6\,ms. Replaying the same configuration offline gives identical widths and payload sizes every round
+and F1 within 0.04.
 
 \section{Discussion}
-\textbf{What the results mean.} No single sketch configuration is best for all queries. Short-window and drift-sensitive statistics
-favour per-round HybridSketch releases with drift-aware windows and adaptive width (SHS-W). Long-horizon cumulative statistics at
-tight budgets favour tree release, but only with the peeling estimator, since tree sums lose HybridSketch's fresh-sign protection. The
-communication savings of adaptive width are modest once a good fixed width is known; its value is not having to know it.
+\textbf{Meaning.} No single configuration wins everywhere: window and drift queries favour SHS-W, while long-horizon
+totals at tight budgets favour the tree, but only with peeling.
 
-\textbf{Negative results.} (i) The tree loses at $\eps\ge1$ and on windows. (ii) Enabling all components at once is worse than SHS-W
-or SHS-C. (iii) The IBLT layer is costlier than a dictionary-assisted CountSketch. (iv) FreshSketch beat HybridSketch in our multi-round reproduction.
-(v) On Sentiment140 the drift detector raises false alarms that cost accuracy.
+\textbf{Negative results.} The tree loses at $\eps\ge1$ and on windows; combining all components hurts; the IBLT costs more
+than a dictionary-assisted sketch; FreshSketch beat HybridSketch; the detector raises false alarms on Sentiment140.
 
-\textbf{Limitations and threats to validity.} SecAgg has no dropout recovery and noise seeds are deterministic for reproducibility. The
-rounded distributed Gaussian is accounted as a continuous one. Guarantees are event-level, so user-level protection degrades with the number
-of windows a user joins. The IBLT reveals sampled counts of decoded items. Gowalla is gridded and words are truncated, and the 8 edges are
-cross-silo aggregators rather than individual devices. Results come from one seed per configuration (the reproduction experiments average 5--10 runs),
-and the last-round $\ell_\infty$ is a single noisy sample.
+\textbf{Limitations.} SecAgg has no dropout recovery; noise seeds are fixed for reproducibility; guarantees are
+event-level, not user-level; the IBLT is not DP; edges are cross-silo aggregators; streaming results use one seed per setting.
 
 \section{Conclusion and Future Work}
-We built and evaluated a federated, privacy-preserving streaming heavy-hitter pipeline with real data flowing through Kafka, Flower,
-secure aggregation and Grafana. We reproduced the core claims of the three base papers inside it and extended them for streams. The drift-aware
-variant recovers from abrupt drift about 3.7$\times$ faster and saves up to 61\% upload. Tree release with peeling halves cumulative error at small
-privacy budgets, and we mapped where each component stops helping. Future work: dropout-robust SecAgg (Flower SecAgg+), discrete Gaussian noise,
-user-level accounting with participation caps, sign-hybrid trees, and DP candidate discovery that removes the public dictionary.
+We built a federated, privacy-preserving streaming heavy-hitter pipeline on Kafka, Flower, SecAgg and Grafana, reproduced
+three base papers in it and extended them for streams. The drift-aware variant recovers 3.7$\times$ faster and saves up to
+61\% upload; tree release with peeling halves cumulative error at small budgets. Future work: dropout-robust SecAgg,
+user-level accounting and DP candidate discovery without a dictionary.
 
 \begin{thebibliography}{00}
 \bibitem{wu2023} J.~Wu, W.~Zhu, P.~Kairouz, and V.~Braverman, ``Private federated frequency estimation: Adapting to the hardness of the instance,'' in \emph{Proc. NeurIPS}, 2023.
