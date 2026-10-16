@@ -1,7 +1,7 @@
 # Recording the presentation (Team 22)
 
 Requirements: one **MP4**, at most **6 minutes**, showing the slides **and** the live pipeline, with audio narration.
-Planned length: about **5 min 20 s**. Name the file `22_StreamHybridSketch_Presentation.mp4`.
+Planned length: about **5 min**. The demo is the last part of the video. Name the file `22_StreamHybridSketch_Presentation.mp4`.
 
 ## Before you press record
 
@@ -15,18 +15,17 @@ Planned length: about **5 min 20 s**. Name the file `22_StreamHybridSketch_Prese
 
 | Time | What is on screen | Notes |
 | --- | --- | --- |
-| 0:00 - 2:50 | Slides 1-8 | Read the speaker notes; about 20 s per slide |
-| 2:50 - 3:00 | Slide 9 (Live demo) | Say what to watch for |
-| 3:00 - 5:00 | PowerShell, then Grafana | Run `.\demo.ps1`; Grafana opens. Narrate: rounds arriving, 3 variants, drift at rounds 70 and 140 (about 0:58 and 1:55 into the run): the green baseline line drops, the other two recover within a round |
-| 5:00 - 5:20 | Slide 10 (Takeaways) | Closing lines, thank you |
+| 0:00 - 2:35 | Slides 1-9 | Read the speaker notes (time marks in each); about 15-20 s per slide |
+| 2:35 - 2:45 | Slide 10 (Live demo: what to watch) | Say what to watch for |
+| 2:45 - 5:00 | PowerShell, then Grafana | Run `.\demo.ps1`; Grafana opens. Narrate: rounds arriving, 3 variants, drift at rounds 70 and 140 (about 1:00 and 1:55 into the run): the green baseline line drops, the other two recover within a round. As it finishes, read the closing lines from slide 10's notes and stop recording |
 
-If you overrun, cut words from slides 3-5 first; keep the demo intact (it is the "complete project workflow").
+If you overrun, cut words from slides 3-7 first; keep the demo intact (it is the "complete project workflow").
 
 ## How to record (Windows 11, no extra software)
 
 1. Press **Win + Shift + R** (Snipping Tool screen recording), select the whole screen.
 2. Turn the **microphone** on in the recording bar (and system audio off), then click Start.
-3. Present: start the slideshow, Alt+Tab to PowerShell at slide 9, run `.\demo.ps1`, show Grafana, Alt+Tab back for slide 10.
+3. Present: start the slideshow, Alt+Tab to PowerShell at slide 10, run `.\demo.ps1`, show Grafana until the run ends, say the closing lines.
 4. Stop; Snipping Tool saves an **MP4** to `Videos\Screen Recordings`. Check the length is under 6:00 and rename it.
 
 Alternatives: OBS Studio (more control, also MP4), or PowerPoint's Record > Export to Video for the slide part
